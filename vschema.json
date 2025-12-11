@@ -1,0 +1,18 @@
+{
+  "sharded": true,
+  "vindexes": {
+    "hash_index": {
+      "type": "hash"
+    }
+  },
+  "tables": {
+    "wp_posts": {
+      "column_vindexes": [
+        {
+          "column": "ID",
+          "name": "hash_index"
+        }
+      ]
+    }
+  }
+}

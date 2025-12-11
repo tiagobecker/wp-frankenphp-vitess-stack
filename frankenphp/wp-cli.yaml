@@ -1,0 +1,8 @@
+# Caminho do WordPress para WP-CLI
+path: /app/public
+
+# Permite execução de WP-CLI como root (útil dentro do container)
+allow-root: true
+
+# Timeout padrão para comandos WP-CLI longos
+http_timeout: 60
