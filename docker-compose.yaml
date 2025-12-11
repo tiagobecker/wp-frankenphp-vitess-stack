@@ -126,9 +126,6 @@ services:
       DB_USER: wpuser
       DB_PASSWORD: wppassword
       WP_ENV: production
-      WP_HOME: ${WP_HOME}
-      WP_SITEURL: ${WP_SITEURL}
-      SERVER_NAME: ${SERVER_NAME}
     depends_on:
       - vtgate
       - redis
