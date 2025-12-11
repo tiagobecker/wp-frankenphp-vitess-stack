@@ -1,19 +1,13 @@
 version: "3.9"
 
 services:
-  # ================================
-  # Vitess Lite (all-in-one)
-  # ================================
   vitess:
-    image: vitess/lite:17.0.3
+    image: vitess/lite:mysql84
     container_name: vitess-lite
     command: [
       "bash", "-c",
       "
       /usr/bin/vtcombo \
-        --topo_implementation=etcd2 \
-        --topo_global_server_address=localhost:2379 \
-        --topo_global_root=/vitess/global \
         --mysql_server_port=15306 \
         --mysql_server_socket_path='' \
         --port=15000 \
@@ -24,15 +18,12 @@ services:
       "
     ]
     ports:
-      - "15306:15306"   # MySQL Protocol (Vitess)
-      - "15000:15000"   # Vitess Admin UI
+      - "15306:15306"
+      - "15000:15000"
     volumes:
       - vitess_data:/vt
     restart: always
 
-  # ================================
-  # Vitess Initializer
-  # ================================
   vitess-init:
     image: mysql:8.0
     depends_on:
@@ -43,9 +34,6 @@ services:
     entrypoint: ["/bin/sh", "/app/init_vitess.sh"]
     restart: "no"
 
-  # ================================
-  # Redis
-  # ================================
   redis:
     image: redis:7
     restart: always
@@ -53,9 +41,6 @@ services:
     volumes:
       - redis_data:/data
 
-  # ================================
-  # FrankenPHP + WordPress
-  # ================================
   frankenphp:
     build: ./frankenphp
     container_name: frankenphp-wp
