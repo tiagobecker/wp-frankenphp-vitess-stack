@@ -2,98 +2,41 @@ version: "3.9"
 
 services:
   # ================================
-  # Vitess Topology (etcd)
+  # Vitess Lite (all-in-one)
   # ================================
-  etcd:
-    image: quay.io/coreos/etcd:v3.5.12
-    command:
-      - /usr/local/bin/etcd
-      - --data-dir=/etcd-data
-      - --name=vitess
-      - --advertise-client-urls=http://etcd:2379
-      - --listen-client-urls=http://0.0.0.0:2379
-      - --listen-peer-urls=http://0.0.0.0:2380
-    volumes:
-      - etcd_data:/etcd-data
-    restart: always
-
-  # ================================
-  # vtctld (admin controller)
-  # ================================
-  vtctld:
-    image: vitess/vtctld:16.2.2
-    command:
-      - vtctld
-      - --topo_implementation=etcd2
-      - --topo_global_server_address=etcd:2379
-      - --topo_global_root=/vitess/global
-      - --port=15000
-      - --logtostderr
-    depends_on:
-      - etcd
-    restart: always
-
-  # ================================
-  # MySQL instance (shard 0)
-  # ================================
-  mysql:
-    image: mysql:8.0
-    environment:
-      MYSQL_ROOT_PASSWORD: rootpass
-    volumes:
-      - mysql_data:/var/lib/mysql
-    restart: always
-
-  # ================================
-  # vttablet (binds mysql to vitess)
-  # ================================
-  vttablet:
-    image: vitess/vttablet:16.2.2
-    command:
-      - vttablet
-      - --topo_implementation=etcd2
-      - --topo_global_server_address=etcd:2379
-      - --topo_global_root=/vitess/global
-      - --cell=zone1
-      - --init_keyspace=wordpress
-      - --init_shard=0
-      - --init_tablet_type=primary
-      - --tablet-path=zone1-0000000100
-      - --logtostderr
-    depends_on:
-      - mysql
-      - vtctld
-      - etcd
-    restart: always
-
-  # ================================
-  # vtgate (MySQL protocol proxy)
-  # ================================
-  vtgate:
-    image: vitess/vtgate:16.2.2
-    command:
-      - vtgate
-      - --topo_implementation=etcd2
-      - --topo_global_server_address=etcd:2379
-      - --topo_global_root=/vitess/global
-      - --cells=zone1
-      - --mysql_server_port=15306
-      - --logtostderr
+  vitess:
+    image: vitess/lite:18.0.0
+    container_name: vitess-lite
+    command: [
+      "bash", "-c",
+      "
+      /usr/bin/vtcombo \
+        --topo_implementation=etcd2 \
+        --topo_global_server_address=localhost:2379 \
+        --topo_global_root=/vitess/global \
+        --mysql_server_port=15306 \
+        --mysql_server_socket_path='' \
+        --port=15000 \
+        --grpc_port=15999 \
+        --logtostderr \
+        &
+      sleep infinity
+      "
+    ]
     ports:
-      - "15306:15306"  # WordPress connects here!
-    depends_on:
-      - vttablet
+      - "15306:15306"   # MySQL Protocol
+      - "15000:15000"   # Admin
+    volumes:
+      - vitess_data:/vt
     restart: always
 
   # ================================
-  # Vitess Initializer (runs only once)
+  # Vitess Initializer
   # ================================
   vitess-init:
     image: mysql:8.0
     depends_on:
-      - vtgate
-      - vtctld
-      - vttablet
+      - vitess
     volumes:
       - ./init_vitess.sh:/app/init_vitess.sh
       - ./vschema.json:/app/vschema.json
@@ -120,17 +63,16 @@ services:
     volumes:
       - ./wordpress:/app/public
     environment:
-      DB_HOST: vtgate
+      DB_HOST: vitess
       DB_PORT: 15306
       DB_NAME: wordpress
       DB_USER: wpuser
       DB_PASSWORD: wppassword
       WP_ENV: production
     depends_on:
-      - vtgate
+      - vitess
       - redis
 
 volumes:
-  etcd_data:
-  mysql_data:
   redis_data:
+  vitess_data:
