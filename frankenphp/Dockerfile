@@ -1,5 +1,8 @@
 FROM dunglas/frankenphp:1-php8.4-bookworm
 
+# ---------------------------------------------------------
+# Dependências de sistema necessárias para extensões PHP
+# ---------------------------------------------------------
 RUN apt-get update && apt-get install -y \
     bash \
     curl \
@@ -24,19 +27,39 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-RUN install-php-extensions \
-    pdo_mysql \
-    mysqli \
-    exif \
+# ---------------------------------------------------------
+# Instala extensões PHP obrigatórias manualmente
+# ---------------------------------------------------------
+
+# GD com suporte a freetype/jpeg/webp
+RUN docker-php-ext-configure gd \
+    --with-freetype \
+    --with-jpeg \
+    --with-webp
+
+RUN docker-php-ext-install -j$(nproc) \
     gd \
     intl \
     zip \
-    opcache \
-    imagick \
-    redis
+    exif \
+    pdo_mysql \
+    mysqli \
+    opcache
 
+# ---------------------------------------------------------
+# Extensões via PECL: Imagick + Redis
+# ---------------------------------------------------------
+RUN pecl install imagick && docker-php-ext-enable imagick
+RUN pecl install redis && docker-php-ext-enable redis
+
+# ---------------------------------------------------------
+# Composer
+# ---------------------------------------------------------
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
+# ---------------------------------------------------------
+# Configurações e arquivos
+# ---------------------------------------------------------
 COPY php.ini /usr/local/etc/php/
 COPY Caddyfile /etc/caddy/Caddyfile
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
