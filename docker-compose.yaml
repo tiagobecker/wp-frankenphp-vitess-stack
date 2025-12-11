@@ -5,7 +5,7 @@ services:
   # Vitess Lite (all-in-one)
   # ================================
   vitess:
-    image: vitess/lite:18.0.0
+    image: vitess/lite:17.0.3
     container_name: vitess-lite
     command: [
       "bash", "-c",
@@ -32,7 +32,6 @@ services:
 
   # ================================
   # Vitess Initializer
-  # (executado automaticamente no deploy)
   # ================================
   vitess-init:
     image: mysql:8.0
