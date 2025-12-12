@@ -1,11 +1,8 @@
 version: "3.9"
 
-x-args:
-  VITESS_TAG: "v23.0.0"   # troque se desejar outra release disponível no GHCR
-
 services:
   # -------------------------
-  # Topology service (etcd)
+  # ETCD (topology store)
   # -------------------------
   etcd:
     image: quay.io/coreos/etcd:v3.5.12
@@ -21,18 +18,17 @@ services:
     restart: always
 
   # -------------------------
-  # vtctld (control UI)
+  # VTCTLD (control plane)
   # -------------------------
   vtctld:
-    image: ghcr.io/vitessio/vitess/vtctld:${VITESS_TAG}
-    command: [
-      "vtctld",
-      "--topo_implementation=etcd2",
-      "--topo_global_server_address=etcd:2379",
-      "--topo_global_root=/vitess/global",
-      "--port=15000",
-      "--logtostderr"
-    ]
+    image: ghcr.io/vitessio/vitess/vtctld:v19.0.0
+    command:
+      - vtctld
+      - --topo_implementation=etcd2
+      - --topo_global_server_address=etcd:2379
+      - --topo_global_root=/vitess/global
+      - --port=15000
+      - --logtostderr
     ports:
       - "15000:15000"
     depends_on:
@@ -40,10 +36,10 @@ services:
     restart: always
 
   # -------------------------
-  # mysql server (physical mysqld for tablet 1)
+  # MYSQL 1
   # -------------------------
   mysql1:
-    image: ghcr.io/vitessio/vitess/mysql80:${VITESS_TAG}
+    image: ghcr.io/vitessio/vitess/mysql80:v19.0.0
     environment:
       MYSQL_ROOT_PASSWORD: rootpass
     volumes:
@@ -51,10 +47,10 @@ services:
     restart: always
 
   # -------------------------
-  # vttablet (binds mysql1 into Vitess)
+  # VTTABLET binds mysql1
   # -------------------------
   vttablet1:
-    image: ghcr.io/vitessio/vitess/vttablet:${VITESS_TAG}
+    image: ghcr.io/vitessio/vitess/vttablet:v19.0.0
     command:
       - vttablet
       - --topo_implementation=etcd2
@@ -74,10 +70,10 @@ services:
     restart: always
 
   # -------------------------
-  # vtgate (proxy; apps connect aqui)
+  # VTGATE (apps connect here)
   # -------------------------
   vtgate:
-    image: ghcr.io/vitessio/vitess/vtgate:${VITESS_TAG}
+    image: ghcr.io/vitessio/vitess/vtgate:v19.0.0
     command:
       - vtgate
       - --topo_implementation=etcd2
@@ -88,17 +84,17 @@ services:
       - --port=15991
       - --logtostderr
     ports:
-      - "15306:15306"   # MySQL protocol for apps
+      - "15306:15306"
       - "15991:15991"
     depends_on:
       - vttablet1
     restart: always
 
   # -------------------------
-  # Vitess initializer (runs once at deploy)
+  # Vitess Init (runs once)
   # -------------------------
   vitess-init:
-    image: ghcr.io/vitessio/vitess/vtctlclient:${VITESS_TAG}
+    image: ghcr.io/vitessio/vitess/vtctlclient:v19.0.0
     depends_on:
       - vtgate
       - vtctld
