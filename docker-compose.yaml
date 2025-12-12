@@ -1,39 +1,117 @@
 version: "3.9"
 
+x-args:
+  VITESS_TAG: "v23.0.0"   # troque se desejar outra release disponível no GHCR
+
 services:
-  vitess:
-    image: vitess/lite:mysql84
-    container_name: vitess-lite
-    command: [
-      "bash", "-c",
-      "
-      /usr/bin/vtcombo \
-        --mysql_server_port=15306 \
-        --mysql_server_socket_path='' \
-        --port=15000 \
-        --grpc_port=15999 \
-        --logtostderr \
-        &
-      sleep infinity
-      "
-    ]
-    ports:
-      - "15306:15306"
-      - "15000:15000"
+  # -------------------------
+  # Topology service (etcd)
+  # -------------------------
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.12
+    command:
+      - /usr/local/bin/etcd
+      - --data-dir=/etcd-data
+      - --name=vitess
+      - --advertise-client-urls=http://etcd:2379
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --listen-peer-urls=http://0.0.0.0:2380
     volumes:
-      - vitess_data:/vt
+      - etcd_data:/etcd-data
     restart: always
 
-  vitess-init:
-    image: mysql:8.0
+  # -------------------------
+  # vtctld (control UI)
+  # -------------------------
+  vtctld:
+    image: ghcr.io/vitessio/vitess/vtctld:${VITESS_TAG}
+    command: [
+      "vtctld",
+      "--topo_implementation=etcd2",
+      "--topo_global_server_address=etcd:2379",
+      "--topo_global_root=/vitess/global",
+      "--port=15000",
+      "--logtostderr"
+    ]
+    ports:
+      - "15000:15000"
     depends_on:
-      - vitess
+      - etcd
+    restart: always
+
+  # -------------------------
+  # mysql server (physical mysqld for tablet 1)
+  # -------------------------
+  mysql1:
+    image: ghcr.io/vitessio/vitess/mysql80:${VITESS_TAG}
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+    volumes:
+      - mysql1_data:/var/lib/mysql
+    restart: always
+
+  # -------------------------
+  # vttablet (binds mysql1 into Vitess)
+  # -------------------------
+  vttablet1:
+    image: ghcr.io/vitessio/vitess/vttablet:${VITESS_TAG}
+    command:
+      - vttablet
+      - --topo_implementation=etcd2
+      - --topo_global_server_address=etcd:2379
+      - --topo_global_root=/vitess/global
+      - --cell=zone1
+      - --init_keyspace=wordpress
+      - --init_shard=0
+      - --init_tablet_type=primary
+      - --tablet-path=zone1-0000000100
+      - --logtostderr
+      - --port=15002
+    depends_on:
+      - mysql1
+      - vtctld
+      - etcd
+    restart: always
+
+  # -------------------------
+  # vtgate (proxy; apps connect aqui)
+  # -------------------------
+  vtgate:
+    image: ghcr.io/vitessio/vitess/vtgate:${VITESS_TAG}
+    command:
+      - vtgate
+      - --topo_implementation=etcd2
+      - --topo_global_server_address=etcd:2379
+      - --topo_global_root=/vitess/global
+      - --cells=zone1
+      - --mysql_server_port=15306
+      - --port=15991
+      - --logtostderr
+    ports:
+      - "15306:15306"   # MySQL protocol for apps
+      - "15991:15991"
+    depends_on:
+      - vttablet1
+    restart: always
+
+  # -------------------------
+  # Vitess initializer (runs once at deploy)
+  # -------------------------
+  vitess-init:
+    image: ghcr.io/vitessio/vitess/vtctlclient:${VITESS_TAG}
+    depends_on:
+      - vtgate
+      - vtctld
+      - vttablet1
     volumes:
       - ./init_vitess.sh:/app/init_vitess.sh
       - ./vschema.json:/app/vschema.json
     entrypoint: ["/bin/sh", "/app/init_vitess.sh"]
     restart: "no"
 
+  # -------------------------
+  # Redis
+  # -------------------------
   redis:
     image: redis:7
     restart: always
@@ -41,6 +119,9 @@ services:
     volumes:
       - redis_data:/data
 
+  # -------------------------
+  # FrankenPHP + WordPress
+  # -------------------------
   frankenphp:
     build: ./frankenphp
     container_name: frankenphp-wp
@@ -48,16 +129,17 @@ services:
     volumes:
       - ./wordpress:/app/public
     environment:
-      DB_HOST: vitess
+      DB_HOST: vtgate
       DB_PORT: 15306
       DB_NAME: wordpress
       DB_USER: wpuser
       DB_PASSWORD: wppassword
       WP_ENV: production
     depends_on:
-      - vitess
+      - vtgate
       - redis
 
 volumes:
+  etcd_data:
+  mysql1_data:
   redis_data:
-  vitess_data:
