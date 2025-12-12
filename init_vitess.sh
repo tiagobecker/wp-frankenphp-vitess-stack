@@ -13,7 +13,7 @@ echo "✅ VTGate disponível!"
 
 # Criar DB e usuário
 echo "📌 Criando base de dados e usuário..."
-mysql -h vitess -P 15306 -u root -prootpass <<EOF
+mysql -h vtgate -P 15306 -u root -prootpass <<EOF
 CREATE DATABASE IF NOT EXISTS wordpress;
 CREATE USER IF NOT EXISTS 'wpuser'@'%' IDENTIFIED BY 'wppassword';
 GRANT ALL PRIVILEGES ON wordpress.* TO 'wpuser'@'%';
